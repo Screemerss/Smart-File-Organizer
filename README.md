@@ -10,6 +10,12 @@ A simple but powerful Python application to automatically organize files in a fo
 *   **Customizable**: Easily extend the file types by modifying the `FILE_TYPES` dictionary in the script.
 *   **Safe**: Runs in the background without blocking the user interface.
 
+## ❤️ Support This Project
+
+If you find this tool useful and want to support its development, you can buy me a coffee!
+
+[!ko-fi](https://ko-fi.com/screemerss)
+
 ## 🚀 How to Use
 
 1.  **Prerequisites**: You need to have Python 3 installed on your system.
