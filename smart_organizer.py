@@ -7,11 +7,12 @@ from tkinter import filedialog, messagebox
 import threading
 
 # --- INTERNAZIONALIZZAZIONE (i18n) ---
-# 1. Rileva la lingua del sistema operativo dell'utente
+# 1. Imposta la lingua in base alle impostazioni predefinite dell'utente e rilevala
 try:
-    lang = locale.getdefaultlocale()[0][:2]
+    locale.setlocale(locale.LC_ALL, '')
+    lang = locale.getlocale()[0][:2]
 except (IndexError, TypeError):
-    lang = 'en' # Imposta l'inglese come lingua di default se non riesce a rilevarla
+    lang = 'en' # Imposta l'inglese come lingua di default se non riesce a rilevarla o impostarla
 
 # 2. Dizionario delle traduzioni
 TRANSLATIONS = {
@@ -54,6 +55,14 @@ if lang not in TRANSLATIONS:
     lang = 'en'
 
 T = TRANSLATIONS[lang] # T sarà il nostro dizionario di traduzione da usare
+
+# --- REGOLE PERSONALIZZATE (Esempio) ---
+# In futuro, l'utente potrà definire queste regole dall'interfaccia.
+# Formato: {'keyword': 'testo_da_cercare', 'folder': 'Cartella_Destinazione'}
+CUSTOM_RULES = [
+    {'keyword': 'fattura', 'folder': 'Documenti/Fatture'},
+    {'keyword': 'screenshot', 'folder': 'Immagini/Screenshots'},
+]
 
 # Dizionario che mappa le estensioni dei file alle cartelle di destinazione
 # Puoi personalizzarlo e ampliarlo facilmente!
@@ -118,8 +127,7 @@ class SmartOrganizerApp:
         folder_selected = filedialog.askdirectory()
         if folder_selected:
             self.source_dir.set(folder_selected)
-            # Questa riga rimane in inglese perché è un log per te, non per l'utente finale nella GUI
-            self.update_status(f"Folder selected: {folder_selected}")
+            self.update_status(f"Cartella selezionata: {folder_selected}")
 
     def start_organizing(self):
         """Avvia il processo di monitoraggio in un thread separato."""
@@ -157,24 +165,37 @@ class SmartOrganizerApp:
                     if os.path.isdir(file_path) or filename.startswith('.'):
                         continue
 
-                    # Trova la cartella di destinazione
                     moved = False
-                    for folder_name, extensions in FILE_TYPES.items():
-                        if any(filename.lower().endswith(ext) for ext in extensions):
-                            dest_folder = os.path.join(source_path, folder_name)
-                            os.makedirs(dest_folder, exist_ok=True) # Crea la cartella se non esiste
+                    
+                    # --- 1. CONTROLLA LE REGOLE PERSONALIZZATE (HANNO LA PRIORITÀ) ---
+                    for rule in CUSTOM_RULES:
+                        if rule['keyword'].lower() in filename.lower():
+                            dest_folder = os.path.join(source_path, rule['folder'])
+                            os.makedirs(dest_folder, exist_ok=True)
                             
                             shutil.move(file_path, os.path.join(dest_folder, filename))
-                            self.update_status(T["status_moved"].format(filename=filename, folder=folder_name))
+                            self.update_status(T["status_moved"].format(filename=filename, folder=rule['folder']))
                             moved = True
-                            break
-                    
-                    # Se non trova una corrispondenza, lo sposta in 'Altro'
+                            break # Trovata una regola, passa al file successivo
+
+                    # --- 2. SE NESSUNA REGOLA CORRISPONDE, USA L'ORGANIZZAZIONE STANDARD PER ESTENSIONE ---
                     if not moved:
-                        dest_folder = os.path.join(source_path, "Altro")
-                        os.makedirs(dest_folder, exist_ok=True)
-                        shutil.move(file_path, os.path.join(dest_folder, filename))
-                        self.update_status(T["status_moved"].format(filename=filename, folder="Altro"))
+                        for folder_name, extensions in FILE_TYPES.items():
+                            if any(filename.lower().endswith(ext) for ext in extensions):
+                                dest_folder = os.path.join(source_path, folder_name)
+                                os.makedirs(dest_folder, exist_ok=True)
+                                
+                                shutil.move(file_path, os.path.join(dest_folder, filename))
+                                self.update_status(T["status_moved"].format(filename=filename, folder=folder_name))
+                                moved = True
+                                break
+                        
+                        # Se non trova una corrispondenza, lo sposta in 'Altro'
+                        if not moved:
+                            dest_folder = os.path.join(source_path, "Altro")
+                            os.makedirs(dest_folder, exist_ok=True)
+                            shutil.move(file_path, os.path.join(dest_folder, filename))
+                            self.update_status(T["status_moved"].format(filename=filename, folder="Altro"))
 
             except Exception as e:
                 self.update_status(T["status_error"].format(error=e))
