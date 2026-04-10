@@ -14,10 +14,7 @@ try:
     if current_locale_info and current_locale_info[0]:
         if current_locale_info[0].startswith('it'):
             lang = 'it'
-        elif current_locale_info[0].startswith('en'):
-            lang = 'en'
-    
-    if lang == 'en':
+    else:
         try:
             locale.setlocale(locale.LC_ALL, 'Italian_Italy.1252')
             lang = 'it'
@@ -59,6 +56,7 @@ TRANSLATIONS = {
         "rules_no_selection_error": "Nessuna regola selezionata da rimuovere.",
         "rules_remove_confirm_title": "Conferma Eliminazione",
         "rules_remove_confirm_message": "Sei sicuro di voler eliminare le regole selezionate?",
+        "rules_list_item": "Se contiene '{keyword}' -> sposta in '{folder}'",
         "rules_save_button": "Salva Modifiche",
         "extension_folder_name": "File {ext}",
         "other_folder_name": "Altro",
@@ -92,6 +90,7 @@ TRANSLATIONS = {
         "rules_no_selection_error": "No rule selected to remove.",
         "rules_remove_confirm_title": "Confirm Deletion",
         "rules_remove_confirm_message": "Are you sure you want to delete the selected rules?",
+        "rules_list_item": "If contains '{keyword}' -> move to '{folder}'",
         "rules_save_button": "Save Changes",
         "extension_folder_name": "{ext} Files",
         "other_folder_name": "Other",
@@ -119,7 +118,10 @@ class SmartOrganizerApp:
         self.root.title(T["window_title"])
         self.root.geometry("500x350")
         if os.path.exists("icon.ico"):
-            self.root.iconbitmap("icon.ico") 
+            try:
+                self.root.iconbitmap("icon.ico")
+            except tk.TclError:
+                pass
 
         self.source_dir = tk.StringVar()
         self.is_running = False
@@ -276,7 +278,7 @@ class SmartOrganizerApp:
     def _update_rules_listbox(self):
         self.rules_listbox.delete(0, tk.END)
         for rule in CUSTOM_RULES:
-            self.rules_listbox.insert(tk.END, f"Se contiene '{rule['keyword']}' -> sposta in '{rule['folder']}'")
+            self.rules_listbox.insert(tk.END, T["rules_list_item"].format(keyword=rule['keyword'], folder=rule['folder']))
 
     def _add_or_save_rule_action(self):
         keyword = self.keyword_entry.get().strip()
@@ -286,7 +288,8 @@ class SmartOrganizerApp:
             messagebox.showerror(T["warn_title"], T["rules_input_error"], parent=self.rules_window)
             return
 
-        if self.editing_index is not None:
+        was_editing = self.editing_index is not None
+        if was_editing:
             CUSTOM_RULES[self.editing_index] = {'keyword': keyword, 'folder': folder}
             self.editing_index = None
             self.add_save_button.config(text=T["rules_add_button"])
@@ -298,8 +301,8 @@ class SmartOrganizerApp:
         self.folder_entry.delete(0, tk.END)
         self._save_rules()
 
-        if self.editing_index is None:
-             messagebox.showinfo(T["rules_window_title"], T["rules_added_success"], parent=self.rules_window)
+        if not was_editing:
+            messagebox.showinfo(T["rules_window_title"], T["rules_added_success"], parent=self.rules_window)
 
     def _remove_rule_action(self):
         selected_indices = self.rules_listbox.curselection()
@@ -359,8 +362,7 @@ class SmartOrganizerApp:
                             else:
                                 dest_folder = os.path.join(source_path, rule['folder'])
                             os.makedirs(dest_folder, exist_ok=True)
-                            
-                            shutil.move(file_path, os.path.join(dest_folder, filename))
+                            shutil.move(file_path, self._resolve_dest(dest_folder, filename))
                             self.update_status(T["status_moved"].format(filename=filename, folder=rule['folder']))
                             moved = True
                             break
@@ -373,18 +375,27 @@ class SmartOrganizerApp:
                             folder_name = T["extension_folder_name"].format(ext=ext_name)
                             dest_folder = os.path.join(source_path, folder_name)
                             os.makedirs(dest_folder, exist_ok=True)
-                            shutil.move(file_path, os.path.join(dest_folder, filename))
+                            shutil.move(file_path, self._resolve_dest(dest_folder, filename))
                             self.update_status(T["status_moved"].format(filename=filename, folder=folder_name))
                         else:
                             dest_folder = os.path.join(source_path, T["other_folder_name"])
                             os.makedirs(dest_folder, exist_ok=True)
-                            shutil.move(file_path, os.path.join(dest_folder, filename))
+                            shutil.move(file_path, self._resolve_dest(dest_folder, filename))
                             self.update_status(T["status_moved"].format(filename=filename, folder=T["other_folder_name"]))
 
             except Exception as e:
                 self.update_status(T["status_error"].format(error=e))
 
             time.sleep(10)
+
+    def _resolve_dest(self, dest_folder, filename):
+        base, ext = os.path.splitext(filename)
+        dest = os.path.join(dest_folder, filename)
+        counter = 1
+        while os.path.exists(dest):
+            dest = os.path.join(dest_folder, f"{base} ({counter}){ext}")
+            counter += 1
+        return dest
 
     def update_status(self, message):
         self.root.after(0, lambda: self.status_label.config(text=message))
